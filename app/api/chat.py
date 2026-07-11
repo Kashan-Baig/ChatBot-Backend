@@ -1,4 +1,7 @@
-from fastapi import APIRouter
+from fastapi import (
+    APIRouter,
+    HTTPException
+)
 
 from app.database.connection import engine
 from app.database.session_manager import SessionManager
@@ -12,7 +15,8 @@ from app.services.chat_service import (
 )
 
 from app.schemas.chat import (
-    ChatRequest
+    ChatRequest,
+    RenameSessionRequest
 )
 
 router = APIRouter()
@@ -80,4 +84,136 @@ def send_message(request: ChatRequest):
     return {
         "thread_id": request.thread_id,
         "response": response
+    }
+
+@router.get(
+    "/history/{thread_id}"
+)
+def get_history(
+    thread_id: str
+):
+
+    session = (
+        session_manager.get_session(
+            thread_id
+        )
+    )
+
+    if not session:
+
+        raise HTTPException(
+            status_code=404,
+            detail="Session not found"
+        )
+
+    messages = (
+        chat_service.get_history(
+            thread_id
+        )
+    )
+
+    history = []
+
+    for msg in messages:
+
+        role = (
+            "assistant"
+            if msg.type == "ai"
+            else "user"
+        )
+
+        history.append(
+            {
+                "role": role,
+                "content": msg.content
+            }
+        )
+
+    return {
+        "thread_id": thread_id,
+        "messages": history
+    }
+
+@router.get(
+    "/{thread_id}"
+)
+def get_chat(
+    thread_id: str
+):
+
+    session = (
+        session_manager.get_session(
+            thread_id
+        )
+    )
+
+    if not session:
+
+        raise HTTPException(
+            status_code=404,
+            detail="Session not found"
+        )
+
+    return {
+        "thread_id": session.thread_id,
+        "title": session.title,
+        "created_at": session.created_at
+    }
+
+@router.put(
+    "/{thread_id}/rename"
+)
+def rename_chat(
+    thread_id: str,
+    request: RenameSessionRequest
+):
+
+    session = (
+        session_manager.get_session(
+            thread_id
+        )
+    )
+
+    if not session:
+
+        raise HTTPException(
+            status_code=404,
+            detail="Session not found"
+        )
+
+    session_manager.update_title(
+        thread_id,
+        request.title
+    )
+
+    return {
+        "message": "Chat renamed"
+    }
+
+@router.delete(
+    "/{thread_id}"
+)
+def delete_chat(
+    thread_id: str
+):
+
+    session = (
+        session_manager.get_session(
+            thread_id
+        )
+    )
+
+    if not session:
+
+        raise HTTPException(
+            status_code=404,
+            detail="Session not found"
+        )
+
+    session_manager.delete_session(
+        thread_id
+    )
+
+    return {
+        "message": "Chat deleted"
     }

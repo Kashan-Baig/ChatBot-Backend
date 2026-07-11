@@ -9,3 +9,11 @@ class ChatRequest(BaseModel):
 class CreateSessionResponse(BaseModel):
     thread_id: str
     title: str
+    
+class ChatRequest(BaseModel):
+    thread_id: str
+    message: str
+
+
+class RenameSessionRequest(BaseModel):
+    title: str

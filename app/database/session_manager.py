@@ -75,3 +75,58 @@ class SessionManager:
             )
 
             return result.fetchall()
+
+    def get_session(
+        self,
+        thread_id: str
+    ):
+
+        with self.engine.begin() as conn:
+
+            return conn.execute(
+                text("""
+                    SELECT *
+                    FROM chat_sessions
+                    WHERE thread_id = :thread_id
+                """),
+                {
+                    "thread_id": thread_id
+                }
+            ).fetchone()
+
+    def update_title(
+        self,
+        thread_id: str,
+        title: str
+    ):
+
+        with self.engine.begin() as conn:
+
+            conn.execute(
+                text("""
+                    UPDATE chat_sessions
+                    SET title = :title
+                    WHERE thread_id = :thread_id
+                """),
+                {
+                    "thread_id": thread_id,
+                    "title": title
+                }
+            )
+
+    def delete_session(
+        self,
+        thread_id: str
+    ):
+
+        with self.engine.begin() as conn:
+
+            conn.execute(
+                text("""
+                    DELETE FROM chat_sessions
+                    WHERE thread_id = :thread_id
+                """),
+                {
+                    "thread_id": thread_id
+                }
+            )
