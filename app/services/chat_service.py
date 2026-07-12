@@ -48,4 +48,31 @@ class ChatService:
         )
 
 
+    def stream_message(
+        self,
+        thread_id: str,
+        message: str
+    ):
+
+        config = {
+            "configurable": {
+                "thread_id": thread_id
+            }
+        }
+
+        for chunk in workflow.stream(
+            {
+                "messages": [
+                    HumanMessage(
+                        content=message
+                    )
+                ]
+            },
+            config=config,
+            stream_mode="messages"
+        ):
+
+            yield chunk
+
+
 chat_service = ChatService()

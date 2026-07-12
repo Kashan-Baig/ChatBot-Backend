@@ -1,5 +1,6 @@
 import uuid
 from sqlalchemy import text
+from datetime import datetime
 
 
 class SessionManager:
@@ -14,7 +15,9 @@ class SessionManager:
                 CREATE TABLE IF NOT EXISTS chat_sessions (
                     thread_id TEXT PRIMARY KEY,
                     title TEXT,
-                    created_at TIMESTAMP DEFAULT NOW()
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    last_message TEXT,
+                    updated_at TIMESTAMP DEFAULT NOW()
                 );
             """))
 
@@ -68,51 +71,15 @@ class SessionManager:
                     SELECT
                         thread_id,
                         title,
-                        created_at
+                        last_message,
+                        created_at,
+                        updated_at
                     FROM chat_sessions
-                    ORDER BY created_at DESC
+                    ORDER BY updated_at DESC
                 """)
             )
 
             return result.fetchall()
-
-    def get_session(
-        self,
-        thread_id: str
-    ):
-
-        with self.engine.begin() as conn:
-
-            return conn.execute(
-                text("""
-                    SELECT *
-                    FROM chat_sessions
-                    WHERE thread_id = :thread_id
-                """),
-                {
-                    "thread_id": thread_id
-                }
-            ).fetchone()
-
-    def update_title(
-        self,
-        thread_id: str,
-        title: str
-    ):
-
-        with self.engine.begin() as conn:
-
-            conn.execute(
-                text("""
-                    UPDATE chat_sessions
-                    SET title = :title
-                    WHERE thread_id = :thread_id
-                """),
-                {
-                    "thread_id": thread_id,
-                    "title": title
-                }
-            )
 
     def delete_session(
         self,
@@ -130,3 +97,26 @@ class SessionManager:
                     "thread_id": thread_id
                 }
             )
+
+
+    def update_activity(
+        self,
+        thread_id: str,
+        last_message: str
+    ):
+
+        with self.engine.begin() as conn:
+
+            conn.execute(
+                text("""
+                UPDATE chat_sessions
+                SET
+                    last_message = :last_message,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE thread_id = :thread_id
+            """),
+            {
+                "thread_id": thread_id,
+                "last_message": last_message
+            }
+        )

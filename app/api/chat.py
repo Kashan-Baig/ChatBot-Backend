@@ -2,6 +2,7 @@ from fastapi import (
     APIRouter,
     HTTPException
 )
+from fastapi.responses import StreamingResponse
 
 from app.database.connection import engine
 from app.database.session_manager import SessionManager
@@ -47,7 +48,9 @@ def sessions():
         {
             "thread_id": row.thread_id,
             "title": row.title,
-            "created_at": row.created_at
+            "last_message": row.last_message,
+            "created_at": row.created_at,
+            "updated_at": row.updated_at
         }
         for row in data
     ]
@@ -70,6 +73,11 @@ def send_message(request: ChatRequest):
         request.message
     )
 
+    session_manager.update_activity(
+        request.thread_id,
+        response
+    )
+
     if session.title == "New Chat":
 
         title = generate_title(
@@ -86,12 +94,8 @@ def send_message(request: ChatRequest):
         "response": response
     }
 
-@router.get(
-    "/history/{thread_id}"
-)
-def get_history(
-    thread_id: str
-):
+@router.get("/history/{thread_id}")
+def get_history(thread_id: str):
 
     session = (
         session_manager.get_session(
@@ -134,12 +138,8 @@ def get_history(
         "messages": history
     }
 
-@router.get(
-    "/{thread_id}"
-)
-def get_chat(
-    thread_id: str
-):
+@router.get("/{thread_id}")
+def get_chat(thread_id: str):
 
     session = (
         session_manager.get_session(
@@ -160,13 +160,8 @@ def get_chat(
         "created_at": session.created_at
     }
 
-@router.put(
-    "/{thread_id}/rename"
-)
-def rename_chat(
-    thread_id: str,
-    request: RenameSessionRequest
-):
+@router.put("/{thread_id}/rename")
+def rename_chat(thread_id: str,request: RenameSessionRequest):
 
     session = (
         session_manager.get_session(
@@ -190,12 +185,8 @@ def rename_chat(
         "message": "Chat renamed"
     }
 
-@router.delete(
-    "/{thread_id}"
-)
-def delete_chat(
-    thread_id: str
-):
+@router.delete("/{thread_id}")
+def delete_chat(thread_id: str):
 
     session = (
         session_manager.get_session(
@@ -217,3 +208,34 @@ def delete_chat(
     return {
         "message": "Chat deleted"
     }
+
+@router.post("/message/stream")
+def stream_message(request: ChatRequest):
+
+    session = session_manager.get_session(
+        request.thread_id
+    )
+
+    if not session:
+
+        raise HTTPException(
+            status_code=404,
+            detail="Session not found"
+        )
+
+    def generate():
+
+        for chunk, metadata in (
+            chat_service.stream_message(
+                request.thread_id,
+                request.message
+            )
+        ):
+
+            if hasattr(chunk, "content"):
+                yield chunk.content
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/plain"
+    )

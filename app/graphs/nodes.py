@@ -1,4 +1,4 @@
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import SystemMessage, AIMessage
 from app.prompts.system_prompt import SYSTEM_PROMPT
 from app.llm.model import model
 
@@ -10,8 +10,8 @@ def chat(state):
         *state["messages"]
     ]
 
-    response = model.invoke(messages)
+    response = "".join(chunk.content for chunk in model.stream(messages))
 
     return {
-        "messages": [response]
+        "messages": [AIMessage(content=response)]
     }
