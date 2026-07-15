@@ -1,3 +1,5 @@
+import json
+
 from fastapi import (
     APIRouter,
     HTTPException
@@ -56,7 +58,7 @@ def sessions():
     ]
 
 @router.post("/message")
-def send_message(request: ChatRequest):
+async def send_message(request: ChatRequest):
 
     session = session_manager.get_session(
         request.thread_id
@@ -68,14 +70,14 @@ def send_message(request: ChatRequest):
             detail="Session not found"
         )
 
-    response = chat_service.send_message(
+    response = await chat_service.send_message(
         request.thread_id,
         request.message
     )
 
     session_manager.update_activity(
         request.thread_id,
-        response
+        request.message
     )
 
     if session.title == "New Chat":
@@ -95,7 +97,7 @@ def send_message(request: ChatRequest):
     }
 
 @router.get("/history/{thread_id}")
-def get_history(thread_id: str):
+async def get_history(thread_id: str):
 
     session = (
         session_manager.get_session(
@@ -110,10 +112,8 @@ def get_history(thread_id: str):
             detail="Session not found"
         )
 
-    messages = (
-        chat_service.get_history(
-            thread_id
-        )
+    messages = await chat_service.get_history(
+        thread_id
     )
 
     history = []
@@ -210,7 +210,7 @@ def delete_chat(thread_id: str):
     }
 
 @router.post("/message/stream")
-def stream_message(request: ChatRequest):
+async def stream_message(request: ChatRequest):
 
     session = session_manager.get_session(
         request.thread_id
@@ -223,19 +223,54 @@ def stream_message(request: ChatRequest):
             detail="Session not found"
         )
 
-    def generate():
+    async def generate():
 
-        for chunk, metadata in (
-            chat_service.stream_message(
+        full_response = ""
+
+        try:
+            async for token in chat_service.stream_message(
                 request.thread_id,
                 request.message
-            )
-        ):
+            ):
+                full_response += token
+                # SSE framing: each event is its own "data:" line.
+                # Sending JSON (not raw text) lets the client tell
+                # content apart from control/error events cleanly.
+                yield f"data: {json.dumps({'content': token})}\n\n"
 
-            if hasattr(chunk, "content"):
-                yield chunk.content
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            return
+
+        # Persist activity/title exactly like the non-streaming route does,
+        # now that we have the full assembled response.
+        session_manager.update_activity(
+            request.thread_id,
+            request.message
+        )
+
+        if session.title == "New Chat":
+
+            title = generate_title(
+                request.message
+            )
+
+            session_manager.update_title(
+                request.thread_id,
+                title
+            )
+
+        yield "data: [DONE]\n\n"
 
     return StreamingResponse(
         generate(),
-        media_type="text/plain"
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            # Prevents nginx (and some other reverse proxies) from
+            # buffering the response, which is a common cause of
+            # streaming showing up as one big chunk in production.
+            "X-Accel-Buffering": "no",
+        },
     )
